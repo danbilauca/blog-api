@@ -1,20 +1,33 @@
 require('dotenv').config();
 
 const express = require('express');
+const mongoose = require('mongoose');
+const bodyParser = require('body-parser');
 const cors = require('cors');
 const fs = require('fs');
 const app = express();
-const port = process.env.PORT || 3030;
+const port = process.env.APP_PORT;// || 3030;
+const mongoUrl = process.env.MONGO_URL;// || 'mongodb://localhost:27017/blog';
 
 app.use(express.json());
 
-// app.use(cors({ origin: `${process.env.FE_APP_URL}` }));
 app.use(cors());
+app.use(bodyParser.json());
+
+mongoose.connect(mongoUrl, { useNewUrlParser: true, useUnifiedTopology: true })
+    .then(() => console.log('Something Connected to MongoDB'))
+    .catch(err => console.log(err));
+
+const postSchema = new mongoose.Schema({
+    title: { type: String, required: true },
+    content: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+});
+
+const Post = mongoose.model('Post', postSchema);
 
 // Blog posts data (mock data
 let blogPosts = [];
-
-// test comment
 
 // Get all blog posts
 app.get('/', (req, res) => {
@@ -23,28 +36,52 @@ app.get('/', (req, res) => {
 });
 
 // Get all blog posts
-app.get('/posts', (req, res) => {
-    console.log('GET /posts');
-    res.json(blogPosts);
+app.get('/posts', async (req, res) => {
+    try {
+        
+        console.log('GET /posts');
+
+        const posts = await Post.find();
+        console.log(posts);
+        res.status(200).json(posts);
+    } catch (error) {
+        console.error(`Error getting posts: ${error}`);
+        res.status(500).json({
+            message: 'Error getting posts',
+            error: error.message
+        });
+    }
 });
 
 // Create a new blog post
-app.post('/posts', (req, res) => {
-    
-    console.log('POST /posts');
-    
-    const newPost = req.body;
+app.post('/posts', async (req, res) => {
+    try {
+        console.log('POST /posts');
 
-    fs.appendFile('./tmp/data.json', JSON.stringify(newPost), (err) => {
-        if (err) {
-            console.error(err);
-            res.status(500).send('Error writing to file');
-        }
-        console.log('Data written to file');
-    });
+        const newPost = new Post(req.body);
+        const savedPost = await newPost.save();
+    
+        fs.appendFile('./tmp/data.json', JSON.stringify(req.body), (err) => {
+            if (err) {
+                console.error(err);
+                res.status(500).send('Error writing to file');
+            }
+            console.log('Data written to file');
+        });
+    
+        blogPosts.push(newPost);
+        res.status(201).json({
+            message: 'Post created successfully',
+            post: savedPost
+        });
 
-    blogPosts.push(newPost);
-    res.status(201).json(newPost);
+    } catch (error) {
+        console.error(`Error saving post: ${error}`);
+        res.status(500).json({
+            message: 'Error saving post',
+            error: error.message
+        });
+    }
 });
 
 // Get a single blog post
@@ -115,5 +152,6 @@ app.post('/write', (req, res) => {
 });
 
 app.listen(port, () => {
+    console.log(`Environment: ${process.env.ENV}`);
     console.log(`Blog API running at http://localhost:${port}`);
 });
